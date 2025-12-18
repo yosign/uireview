@@ -30,7 +30,7 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   
   // 固定使用默认 prompt
-  const prompt = 'High quality';
+  const prompt = 'Generate a 2x2 grid avatar';
 
   // 页面加载时恢复状态
   useEffect(() => {
