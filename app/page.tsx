@@ -31,17 +31,26 @@ export default function Home() {
 
   // 页面加载时恢复状态
   useEffect(() => {
-    const savedPrompt = sessionStorage.getItem('sprite_prompt');
-    const savedPreviewUrl = sessionStorage.getItem('sprite_preview_url');
-    const savedFileId = sessionStorage.getItem('sprite_file_id');
+    // 确保在客户端环境中执行
+    if (typeof window === 'undefined') return;
+    
+    try {
+      const savedPrompt = sessionStorage.getItem('sprite_prompt');
+      const savedPreviewUrl = sessionStorage.getItem('sprite_preview_url');
+      const savedFileId = sessionStorage.getItem('sprite_file_id');
 
-    if (savedPrompt) setPrompt(savedPrompt);
-    if (savedPreviewUrl) {
-      setPreviewUrl(savedPreviewUrl);
-      // 如果有预览图，说明之前上传过文件，设置状态提示用户
-      setStatus('已恢复上次上传的图片和设置，可直接生成或重新上传');
+      console.log('恢复状态:', { savedPrompt, hasPreview: !!savedPreviewUrl, savedFileId });
+
+      if (savedPrompt) setPrompt(savedPrompt);
+      if (savedPreviewUrl) {
+        setPreviewUrl(savedPreviewUrl);
+        // 如果有预览图，说明之前上传过文件，设置状态提示用户
+        setStatus('已恢复上次上传的图片和设置，可直接生成或重新上传');
+      }
+      if (savedFileId) setCachedFileId(savedFileId);
+    } catch (error) {
+      console.error('恢复状态失败:', error);
     }
-    if (savedFileId) setCachedFileId(savedFileId);
   }, []);
 
 
@@ -229,7 +238,9 @@ export default function Home() {
         fileId = await uploadFile(file);
         console.log('文件上传成功，ID:', fileId);
         // 更新缓存
-        sessionStorage.setItem('sprite_file_id', fileId);
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('sprite_file_id', fileId);
+        }
         setCachedFileId(fileId);
       } else {
         console.log('使用缓存的文件 ID:', fileId);
@@ -240,11 +251,13 @@ export default function Home() {
       }
 
       // 保存当前输入状态到 sessionStorage
-      try {
-        sessionStorage.setItem('sprite_prompt', prompt);
-        // sessionStorage.setItem('sprite_preview_url', previewUrl); // 移到成功后处理，并增加大小检查
-      } catch (e) {
-        console.warn('SessionStorage quota exceeded during state save:', e);
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.setItem('sprite_prompt', prompt);
+          // sessionStorage.setItem('sprite_preview_url', previewUrl); // 移到成功后处理，并增加大小检查
+        } catch (e) {
+          console.warn('SessionStorage quota exceeded during state save:', e);
+        }
       }
 
       // 步骤2: 调用工作流（通过 Next.js API 路由代理）
@@ -339,19 +352,23 @@ export default function Home() {
       setStatus('生成成功，正在跳转...');
       setProgress(100); // 瞬间完成
       
-      try {
-        // 尝试保存图片 URL，如果太大则可能失败
-        sessionStorage.setItem('sprite_image_url', imageUrl);
-        
-        // 尝试保存预览图（如果之前有的话），但做一些压缩或截断处理
-        // 注意：这里我们其实可以直接用 sprite_image_url 作为后续的“预览图”如果它可访问的话
-        // 但为了简单，我们还是尝试保存，但捕获错误
-        if (previewUrl && previewUrl.length < 3 * 1024 * 1024) { // 只有小于 3MB 才存
-           sessionStorage.setItem('sprite_preview_url', previewUrl);
+      if (typeof window !== 'undefined') {
+        try {
+          // 尝试保存图片 URL，如果太大则可能失败
+          sessionStorage.setItem('sprite_image_url', imageUrl);
+          
+          // 尝试保存预览图（如果之前有的话），但做一些压缩或截断处理
+          // 注意：这里我们其实可以直接用 sprite_image_url 作为后续的"预览图"如果它可访问的话
+          // 但为了简单，我们还是尝试保存，但捕获错误
+          if (previewUrl && previewUrl.length < 3 * 1024 * 1024) { // 只有小于 3MB 才存
+             sessionStorage.setItem('sprite_preview_url', previewUrl);
+          }
+          
+          console.log('状态已保存到 sessionStorage');
+        } catch (e) {
+          console.warn('SessionStorage quota exceeded, some state may not be saved:', e);
+          // 不阻断跳转，只是无法恢复预览图
         }
-      } catch (e) {
-        console.warn('SessionStorage quota exceeded, some state may not be saved:', e);
-        // 不阻断跳转，只是无法恢复预览图
       }
       
       setTimeout(() => {
@@ -476,9 +493,11 @@ export default function Home() {
                 setPreviewUrl('');
                 setStatus('');
                 // 清除 sessionStorage
-                sessionStorage.removeItem('sprite_prompt');
-                sessionStorage.removeItem('sprite_preview_url');
-                sessionStorage.removeItem('sprite_file_id');
+                if (typeof window !== 'undefined') {
+                  sessionStorage.removeItem('sprite_prompt');
+                  sessionStorage.removeItem('sprite_preview_url');
+                  sessionStorage.removeItem('sprite_file_id');
+                }
               }}
             >
               重置

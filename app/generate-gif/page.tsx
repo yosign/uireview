@@ -31,7 +31,12 @@ export default function GenerateAvatar() {
 
   // 加载头像源图
   useEffect(() => {
+    // 确保在客户端环境中执行
+    if (typeof window === 'undefined') return;
+    
     const url = sessionStorage.getItem('sprite_image_url');
+    console.log('加载头像源图:', url);
+    
     if (!url) {
       setStatus('未找到源图片，请先完成步骤1');
       return;
