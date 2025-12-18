@@ -56,7 +56,7 @@ export default function Home() {
 
   // 监听粘贴事件
   useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
+    const handlePaste = async (e: ClipboardEvent) => {
       // 如果正在加载或者在输入框中粘贴，不处理（除非在输入框中也想支持粘贴图片，但通常输入框是粘贴文字）
       // 这里我们允许全局粘贴，但如果有 input focus 且粘贴的是纯文本，浏览器默认行为会处理
       // 我们主要关心的是粘贴板里的 items 是否包含图片
@@ -74,14 +74,29 @@ export default function Home() {
               return;
             }
             
-            // 设置文件和预览
+            // 设置文件
             setFile(blob);
             setCachedFileId(null); // 新文件粘贴了，清除之前的 fileId 缓存
-            const reader = new FileReader();
-            reader.onload = (e) => {
-              setPreviewUrl(e.target?.result as string);
-            };
-            reader.readAsDataURL(blob);
+            
+            // 清除旧的预览图
+            if (typeof window !== 'undefined') {
+              sessionStorage.removeItem('sprite_preview_url');
+            }
+            
+            try {
+              // 创建压缩后的预览图
+              const compressedPreview = await compressImageForPreview(blob);
+              setPreviewUrl(compressedPreview);
+              console.log('粘贴图片已压缩');
+            } catch (error) {
+              console.error('粘贴图片压缩失败:', error);
+              // 如果压缩失败，使用原始图片
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                setPreviewUrl(e.target?.result as string);
+              };
+              reader.readAsDataURL(blob);
+            }
             
             // 阻止默认粘贴行为（防止图片被粘贴到输入框等地方）
             e.preventDefault();
@@ -145,8 +160,54 @@ export default function Home() {
   }, [loading]);
 
 
+  // 压缩图片用于预览（减少 sessionStorage 占用）
+  const compressImageForPreview = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          // 创建 canvas 进行压缩
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('无法创建 canvas context'));
+            return;
+          }
+          
+          // 计算压缩后的尺寸，最大宽度或高度为 800px
+          const maxSize = 800;
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > height && width > maxSize) {
+            height = (height * maxSize) / width;
+            width = maxSize;
+          } else if (height > maxSize) {
+            width = (width * maxSize) / height;
+            height = maxSize;
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          // 绘制压缩后的图片
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // 转换为 base64，使用较低的质量以减少体积
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          resolve(compressedDataUrl);
+        };
+        img.onerror = () => reject(new Error('图片加载失败'));
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error('文件读取失败'));
+      reader.readAsDataURL(file);
+    });
+  };
+
   // 处理文件选择
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       if (selectedFile.size > 4 * 1024 * 1024) { // 4MB 限制
@@ -161,12 +222,20 @@ export default function Home() {
         sessionStorage.removeItem('sprite_preview_url');
       }
       
-      // 创建预览
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setPreviewUrl(e.target?.result as string);
-      };
-      reader.readAsDataURL(selectedFile);
+      try {
+        // 创建压缩后的预览图
+        const compressedPreview = await compressImageForPreview(selectedFile);
+        setPreviewUrl(compressedPreview);
+        console.log('预览图已压缩，原始大小:', selectedFile.size, '压缩后 base64 长度:', compressedPreview.length);
+      } catch (error) {
+        console.error('图片压缩失败:', error);
+        // 如果压缩失败，使用原始图片
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setPreviewUrl(e.target?.result as string);
+        };
+        reader.readAsDataURL(selectedFile);
+      }
     }
   };
 
@@ -366,18 +435,16 @@ export default function Home() {
           // 先清除旧的预览图，避免恢复时显示旧数据
           sessionStorage.removeItem('sprite_preview_url');
           
-          // 尝试保存新预览图，但有大小限制
-          // 注意：如果图片太大，我们宁愿不保存也不要保留旧数据
-          if (previewUrl && previewUrl.length < 2 * 1024 * 1024) { // 限制为 2MB
+          // 尝试保存新预览图
+          // 由于我们已经在上传时压缩了预览图，这里应该可以正常保存
+          if (previewUrl) {
              try {
                sessionStorage.setItem('sprite_preview_url', previewUrl);
-               console.log('预览图已保存到 sessionStorage');
+               console.log('预览图已保存到 sessionStorage，大小:', previewUrl.length, '字符');
              } catch (storageError) {
-               console.warn('预览图太大无法保存:', storageError);
+               console.warn('预览图保存失败（可能超出 sessionStorage 配额）:', storageError);
                // 保存失败也没关系，不影响功能
              }
-          } else {
-            console.log('预览图超过大小限制，不保存到 sessionStorage');
           }
           
           console.log('状态已保存到 sessionStorage');
