@@ -307,8 +307,15 @@ export default function Home() {
         throw new Error(errorMessage);
       }
 
-      const result = await response.json();
-      console.log('API 响应:', result);
+      let result;
+      try {
+        result = await response.json();
+        console.log('API 响应:', result);
+      } catch (jsonError) {
+        // JSON 解析失败，通常是因为 API 超时返回了 HTML 错误页面
+        console.error('JSON 解析失败:', jsonError);
+        throw new Error('哎呀AI太忙了，一直没回我，请再试一次吧');
+      }
 
       // 提取图片 URL
       let imageUrl = null;
