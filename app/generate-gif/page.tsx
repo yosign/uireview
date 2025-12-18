@@ -291,9 +291,14 @@ export default function GenerateAvatar() {
           {/* 控制按钮 */}
           <div className="flex justify-center gap-4">
             <Button
-              onClick={() => router.push('/')}
+              onClick={() => {
+                // 保留当前的图片和设置，返回首页重新制作
+                // sessionStorage 中的数据会被保留，首页会自动恢复
+                router.push('/');
+              }}
               variant="outline"
               className="h-11 flex-1 rounded-lg text-base font-medium border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+              title="返回首页重新制作，您的图片和设置会被保留"
             >
               重新制作
             </Button>

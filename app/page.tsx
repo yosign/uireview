@@ -36,7 +36,11 @@ export default function Home() {
     const savedFileId = sessionStorage.getItem('sprite_file_id');
 
     if (savedPrompt) setPrompt(savedPrompt);
-    if (savedPreviewUrl) setPreviewUrl(savedPreviewUrl);
+    if (savedPreviewUrl) {
+      setPreviewUrl(savedPreviewUrl);
+      // 如果有预览图，说明之前上传过文件，设置状态提示用户
+      setStatus('已恢复上次上传的图片和设置，可直接生成或重新上传');
+    }
     if (savedFileId) setCachedFileId(savedFileId);
   }, []);
 
