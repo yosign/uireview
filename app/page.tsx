@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { saveToIndexedDB, getFromIndexedDB, removeFromIndexedDB } from '@/lib/imageStorage';
 
 export default function Home() {
   const router = useRouter();
@@ -34,29 +35,35 @@ export default function Home() {
     // 确保在客户端环境中执行
     if (typeof window === 'undefined') return;
     
-    try {
-      const savedPrompt = sessionStorage.getItem('sprite_prompt');
-      const savedPreviewUrl = sessionStorage.getItem('sprite_preview_url');
-      const savedFileId = sessionStorage.getItem('sprite_file_id');
+    const restoreState = async () => {
+      try {
+        const savedPrompt = sessionStorage.getItem('sprite_prompt');
+        const savedFileId = sessionStorage.getItem('sprite_file_id');
+        
+        // 从 IndexedDB 读取预览图（支持大图片）
+        const savedPreviewUrl = await getFromIndexedDB('sprite_preview_url');
 
-      console.log('恢复状态:', { savedPrompt, hasPreview: !!savedPreviewUrl, savedFileId });
+        console.log('恢复状态:', { savedPrompt, hasPreview: !!savedPreviewUrl, savedFileId });
 
-      if (savedPrompt) setPrompt(savedPrompt);
-      if (savedPreviewUrl) {
-        setPreviewUrl(savedPreviewUrl);
-        // 如果有预览图，说明之前上传过文件，设置状态提示用户
-        setStatus('已恢复上次上传的图片和设置，可直接生成或重新上传');
+        if (savedPrompt) setPrompt(savedPrompt);
+        if (savedPreviewUrl) {
+          setPreviewUrl(savedPreviewUrl);
+          // 如果有预览图，说明之前上传过文件，设置状态提示用户
+          setStatus('已恢复上次上传的图片和设置，可直接生成或重新上传');
+        }
+        if (savedFileId) setCachedFileId(savedFileId);
+      } catch (error) {
+        console.error('恢复状态失败:', error);
       }
-      if (savedFileId) setCachedFileId(savedFileId);
-    } catch (error) {
-      console.error('恢复状态失败:', error);
-    }
+    };
+    
+    restoreState();
   }, []);
 
 
   // 监听粘贴事件
   useEffect(() => {
-    const handlePaste = async (e: ClipboardEvent) => {
+    const handlePaste = (e: ClipboardEvent) => {
       // 如果正在加载或者在输入框中粘贴，不处理（除非在输入框中也想支持粘贴图片，但通常输入框是粘贴文字）
       // 这里我们允许全局粘贴，但如果有 input focus 且粘贴的是纯文本，浏览器默认行为会处理
       // 我们主要关心的是粘贴板里的 items 是否包含图片
@@ -74,29 +81,28 @@ export default function Home() {
               return;
             }
             
-            // 设置文件
+            // 设置文件和预览
             setFile(blob);
             setCachedFileId(null); // 新文件粘贴了，清除之前的 fileId 缓存
             
-            // 清除旧的预览图
-            if (typeof window !== 'undefined') {
-              sessionStorage.removeItem('sprite_preview_url');
-            }
+            // 清除旧预览图
+            removeFromIndexedDB('sprite_preview_url').catch(err => 
+              console.warn('清除旧预览图失败:', err)
+            );
             
-            try {
-              // 创建压缩后的预览图
-              const compressedPreview = await compressImageForPreview(blob);
-              setPreviewUrl(compressedPreview);
-              console.log('粘贴图片已压缩');
-            } catch (error) {
-              console.error('粘贴图片压缩失败:', error);
-              // 如果压缩失败，使用原始图片
-              const reader = new FileReader();
-              reader.onload = (e) => {
-                setPreviewUrl(e.target?.result as string);
-              };
-              reader.readAsDataURL(blob);
-            }
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+              const dataUrl = e.target?.result as string;
+              setPreviewUrl(dataUrl);
+              
+              // 保存到 IndexedDB
+              try {
+                await saveToIndexedDB('sprite_preview_url', dataUrl);
+              } catch (error) {
+                console.warn('保存粘贴图片到 IndexedDB 失败:', error);
+              }
+            };
+            reader.readAsDataURL(blob);
             
             // 阻止默认粘贴行为（防止图片被粘贴到输入框等地方）
             e.preventDefault();
@@ -160,54 +166,8 @@ export default function Home() {
   }, [loading]);
 
 
-  // 压缩图片用于预览（减少 sessionStorage 占用）
-  const compressImageForPreview = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          // 创建 canvas 进行压缩
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            reject(new Error('无法创建 canvas context'));
-            return;
-          }
-          
-          // 计算压缩后的尺寸，最大宽度或高度为 800px
-          const maxSize = 800;
-          let width = img.width;
-          let height = img.height;
-          
-          if (width > height && width > maxSize) {
-            height = (height * maxSize) / width;
-            width = maxSize;
-          } else if (height > maxSize) {
-            width = (width * maxSize) / height;
-            height = maxSize;
-          }
-          
-          canvas.width = width;
-          canvas.height = height;
-          
-          // 绘制压缩后的图片
-          ctx.drawImage(img, 0, 0, width, height);
-          
-          // 转换为 base64，使用较低的质量以减少体积
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
-          resolve(compressedDataUrl);
-        };
-        img.onerror = () => reject(new Error('图片加载失败'));
-        img.src = e.target?.result as string;
-      };
-      reader.onerror = () => reject(new Error('文件读取失败'));
-      reader.readAsDataURL(file);
-    });
-  };
-
   // 处理文件选择
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       if (selectedFile.size > 4 * 1024 * 1024) { // 4MB 限制
@@ -217,25 +177,27 @@ export default function Home() {
       setFile(selectedFile);
       setCachedFileId(null); // 新文件选择了，清除之前的 fileId 缓存，确保重新上传
       
-      // 清除 sessionStorage 中旧的预览图，避免恢复时显示旧数据
+      // 清除 IndexedDB 中旧的预览图，避免恢复时显示旧数据
       if (typeof window !== 'undefined') {
-        sessionStorage.removeItem('sprite_preview_url');
+        removeFromIndexedDB('sprite_preview_url').catch(err => 
+          console.warn('清除旧预览图失败:', err)
+        );
       }
       
-      try {
-        // 创建压缩后的预览图
-        const compressedPreview = await compressImageForPreview(selectedFile);
-        setPreviewUrl(compressedPreview);
-        console.log('预览图已压缩，原始大小:', selectedFile.size, '压缩后 base64 长度:', compressedPreview.length);
-      } catch (error) {
-        console.error('图片压缩失败:', error);
-        // 如果压缩失败，使用原始图片
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setPreviewUrl(e.target?.result as string);
-        };
-        reader.readAsDataURL(selectedFile);
-      }
+      // 创建预览
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const dataUrl = e.target?.result as string;
+        setPreviewUrl(dataUrl);
+        
+        // 保存到 IndexedDB（支持大图片）
+        try {
+          await saveToIndexedDB('sprite_preview_url', dataUrl);
+        } catch (error) {
+          console.warn('保存预览图到 IndexedDB 失败:', error);
+        }
+      };
+      reader.readAsDataURL(selectedFile);
     }
   };
 
@@ -423,33 +385,29 @@ export default function Home() {
         throw new Error('未能从响应中提取图片URL');
       }
 
-      // 保存到 sessionStorage 并跳转
+      // 保存到 storage 并跳转
       setStatus('生成成功，正在跳转...');
       setProgress(100); // 瞬间完成
       
       if (typeof window !== 'undefined') {
         try {
-          // 尝试保存图片 URL
+          // 保存图片 URL 到 sessionStorage（URL 通常很小）
           sessionStorage.setItem('sprite_image_url', imageUrl);
           
-          // 先清除旧的预览图，避免恢复时显示旧数据
-          sessionStorage.removeItem('sprite_preview_url');
-          
-          // 尝试保存新预览图
-          // 由于我们已经在上传时压缩了预览图，这里应该可以正常保存
+          // 保存预览图到 IndexedDB（支持大图片）
           if (previewUrl) {
-             try {
-               sessionStorage.setItem('sprite_preview_url', previewUrl);
-               console.log('预览图已保存到 sessionStorage，大小:', previewUrl.length, '字符');
-             } catch (storageError) {
-               console.warn('预览图保存失败（可能超出 sessionStorage 配额）:', storageError);
-               // 保存失败也没关系，不影响功能
-             }
+            try {
+              await saveToIndexedDB('sprite_preview_url', previewUrl);
+              console.log('预览图已保存到 IndexedDB');
+            } catch (storageError) {
+              console.warn('预览图保存到 IndexedDB 失败:', storageError);
+              // 保存失败也没关系，不影响功能
+            }
           }
           
-          console.log('状态已保存到 sessionStorage');
+          console.log('状态已保存');
         } catch (e) {
-          console.warn('SessionStorage quota exceeded, some state may not be saved:', e);
+          console.warn('保存状态失败:', e);
           // 不阻断跳转，只是无法恢复预览图
         }
       }
@@ -575,11 +533,14 @@ export default function Home() {
                 setPrompt('');
                 setPreviewUrl('');
                 setStatus('');
-                // 清除 sessionStorage
+                // 清除 sessionStorage 和 IndexedDB
                 if (typeof window !== 'undefined') {
                   sessionStorage.removeItem('sprite_prompt');
-                  sessionStorage.removeItem('sprite_preview_url');
                   sessionStorage.removeItem('sprite_file_id');
+                  // 从 IndexedDB 删除预览图
+                  removeFromIndexedDB('sprite_preview_url').catch(err =>
+                    console.warn('清除预览图失败:', err)
+                  );
                 }
               }}
             >
