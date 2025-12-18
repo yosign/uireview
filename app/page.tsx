@@ -24,11 +24,13 @@ export default function Home() {
   
   const [file, setFile] = useState<File | null>(null);
   const [cachedFileId, setCachedFileId] = useState<string | null>(null); // 新增：缓存的文件 ID
-  const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
   const [previewUrl, setPreviewUrl] = useState('');
   const [progress, setProgress] = useState(0);
+  
+  // 固定使用默认 prompt
+  const prompt = 'High quality';
 
   // 页面加载时恢复状态
   useEffect(() => {
@@ -37,19 +39,17 @@ export default function Home() {
     
     const restoreState = async () => {
       try {
-        const savedPrompt = sessionStorage.getItem('sprite_prompt');
         const savedFileId = sessionStorage.getItem('sprite_file_id');
         
         // 从 IndexedDB 读取预览图（支持大图片）
         const savedPreviewUrl = await getFromIndexedDB('sprite_preview_url');
 
-        console.log('恢复状态:', { savedPrompt, hasPreview: !!savedPreviewUrl, savedFileId });
+        console.log('恢复状态:', { hasPreview: !!savedPreviewUrl, savedFileId });
 
-        if (savedPrompt) setPrompt(savedPrompt);
         if (savedPreviewUrl) {
           setPreviewUrl(savedPreviewUrl);
           // 如果有预览图，说明之前上传过文件，设置状态提示用户
-          setStatus('已恢复上次上传的图片和设置，可直接生成或重新上传');
+          setStatus('已恢复上次上传的图片，可直接生成或重新上传');
         }
         if (savedFileId) setCachedFileId(savedFileId);
       } catch (error) {
@@ -287,15 +287,7 @@ export default function Home() {
         throw new Error('未获取到文件 ID');
       }
 
-      // 保存当前输入状态到 sessionStorage
-      if (typeof window !== 'undefined') {
-        try {
-          sessionStorage.setItem('sprite_prompt', prompt);
-          // sessionStorage.setItem('sprite_preview_url', previewUrl); // 移到成功后处理，并增加大小检查
-        } catch (e) {
-          console.warn('SessionStorage quota exceeded during state save:', e);
-        }
-      }
+      // 不再需要保存 prompt，因为使用固定值
 
       // 步骤2: 调用工作流（通过 Next.js API 路由代理）
       setStatus('正在生成手绘头像...');
@@ -303,9 +295,8 @@ export default function Home() {
       // 处理背景参数 - 固定为纯白背景
       const backgroundValue = 'Isolated on a pure white background.';
 
-      // 强制加入手绘风格描述
-      const handDrawnStyle = "Hand-drawn artistic style, clean lines, high quality avatar.";
-      const apiPrompt = prompt ? `${handDrawnStyle} Details: ${prompt}` : handDrawnStyle;
+      // 使用固定的 prompt（用户无法修改）
+      const apiPrompt = prompt; // "High quality"
       
       const requestBody = {
         query: apiPrompt,
@@ -484,21 +475,6 @@ export default function Home() {
             </label>
           </div>
 
-          {/* 手绘头像细节描述 */}
-          <div className="space-y-2">
-            <Label htmlFor="prompt" className="text-sm font-medium text-gray-500 ml-1">手绘头像细节描述 (选填)</Label>
-            <div className="relative">
-              <Textarea
-                id="prompt"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="例如：戴眼镜，闭眼睛...（留空则生成默认手绘头像）"
-                rows={3}
-                className="w-full resize-none rounded-lg border border-gray-200 bg-white focus:bg-white focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 text-base p-4 transition-all placeholder:text-gray-300 font-normal shadow-sm"
-              />
-            </div>
-          </div>
-
           {/* 状态显示 */}
           {status && (
             <div className={`py-3 px-4 rounded-lg text-sm font-medium flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-1 ${
@@ -530,12 +506,10 @@ export default function Home() {
               onClick={() => {
                 setFile(null);
                 setCachedFileId(null);
-                setPrompt('');
                 setPreviewUrl('');
                 setStatus('');
                 // 清除 sessionStorage 和 IndexedDB
                 if (typeof window !== 'undefined') {
-                  sessionStorage.removeItem('sprite_prompt');
                   sessionStorage.removeItem('sprite_file_id');
                   // 从 IndexedDB 删除预览图
                   removeFromIndexedDB('sprite_preview_url').catch(err =>
