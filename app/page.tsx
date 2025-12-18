@@ -155,6 +155,12 @@ export default function Home() {
       }
       setFile(selectedFile);
       setCachedFileId(null); // 新文件选择了，清除之前的 fileId 缓存，确保重新上传
+      
+      // 清除 sessionStorage 中旧的预览图，避免恢复时显示旧数据
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('sprite_preview_url');
+      }
+      
       // 创建预览
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -354,14 +360,24 @@ export default function Home() {
       
       if (typeof window !== 'undefined') {
         try {
-          // 尝试保存图片 URL，如果太大则可能失败
+          // 尝试保存图片 URL
           sessionStorage.setItem('sprite_image_url', imageUrl);
           
-          // 尝试保存预览图（如果之前有的话），但做一些压缩或截断处理
-          // 注意：这里我们其实可以直接用 sprite_image_url 作为后续的"预览图"如果它可访问的话
-          // 但为了简单，我们还是尝试保存，但捕获错误
-          if (previewUrl && previewUrl.length < 3 * 1024 * 1024) { // 只有小于 3MB 才存
-             sessionStorage.setItem('sprite_preview_url', previewUrl);
+          // 先清除旧的预览图，避免恢复时显示旧数据
+          sessionStorage.removeItem('sprite_preview_url');
+          
+          // 尝试保存新预览图，但有大小限制
+          // 注意：如果图片太大，我们宁愿不保存也不要保留旧数据
+          if (previewUrl && previewUrl.length < 2 * 1024 * 1024) { // 限制为 2MB
+             try {
+               sessionStorage.setItem('sprite_preview_url', previewUrl);
+               console.log('预览图已保存到 sessionStorage');
+             } catch (storageError) {
+               console.warn('预览图太大无法保存:', storageError);
+               // 保存失败也没关系，不影响功能
+             }
+          } else {
+            console.log('预览图超过大小限制，不保存到 sessionStorage');
           }
           
           console.log('状态已保存到 sessionStorage');
