@@ -434,6 +434,18 @@ export default function Home() {
 
                 {/* 内容 */}
                 <div className="p-4 space-y-4">
+                  {/* 原图展示 */}
+                  {previewUrl && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium text-muted-foreground">原图</h3>
+                      <img 
+                        src={previewUrl} 
+                        alt={`界面 ${index + 1} 原图`}
+                        className="rounded-lg max-w-full h-auto max-h-[400px]"
+                      />
+                    </div>
+                  )}
+
                   {/* 主要目标 */}
                   {iface.primary_goal && (
                     <div className="space-y-1">
