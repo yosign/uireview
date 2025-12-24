@@ -1,0 +1,75 @@
+# UI Review Tool - Cursor Rules
+
+## 项目说明
+这是一个 UI/UX 界面分析工具，通过 Dify API 提供专业的界面审查报告。
+
+## 技术栈
+- Next.js 14 (App Router)
+- TypeScript
+- Tailwind CSS
+- shadcn/ui
+
+## 代码规范
+
+### 通用规则
+- 使用 TypeScript，所有类型必须明确定义
+- 使用函数式组件和 React Hooks
+- 遵循 ESLint 规则
+- 注释关键逻辑
+- 保持代码简洁易读
+
+### 命名规范
+- 组件使用 PascalCase：`ButtonComponent`
+- 函数使用 camelCase：`handleSubmit`
+- 常量使用 UPPER_SNAKE_CASE：`API_ENDPOINT`
+- 文件名与组件名一致
+
+### 样式规范
+- 优先使用 Tailwind CSS 类
+- 避免内联样式
+- 使用 shadcn/ui 组件库
+- 保持响应式设计
+
+### API 规范
+- 使用 Next.js API Routes 代理外部 API
+- 完善的错误处理
+- 清晰的类型定义
+- 适当的日志记录
+
+## 项目结构
+```
+app/
+  api/          # API 路由
+  page.tsx      # 主页面
+  layout.tsx    # 根布局
+components/     # React 组件
+lib/            # 工具函数
+public/         # 静态资源
+```
+
+## 环境变量
+- NEXT_PUBLIC_DIFY_API_KEY：Dify API 密钥
+- NEXT_PUBLIC_DIFY_API_ENDPOINT：Dify API 端点
+
+## 注意事项
+1. 不要提交 .env.local 文件
+2. 保持类型安全
+3. 优先考虑用户体验
+4. 保持代码可维护性
+5. 适当的错误处理和用户反馈
+
+## 开发流程
+1. 创建功能分支
+2. 开发并测试
+3. 确保无 lint 错误
+4. 提交清晰的 commit 信息
+5. 创建 Pull Request
+
+## 测试要点
+- 图片上传功能（点击/拖拽/粘贴）
+- API 调用和错误处理
+- 加载状态和进度显示
+- 响应式布局
+- 数据格式化展示
+
+
